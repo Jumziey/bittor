@@ -10,21 +10,21 @@ type TorData struct {
 	pos int
 }
 
-func (t *Data)next() byte {
+func (t *TorData)next() byte {
 	b := t.Data[t.pos]
 	t.pos = t.pos+1
 	return b
 }
 
-func (t *Data)peek() byte {
+func (t *TorData)peek() byte {
 	return t.Data[t.pos]
 }
 
-func (t *Data)prev() {
+func (t *TorData)prev() {
 	t.pos = t.pos-1
 }
 
-func intParse(t *Data) int {
+func intParse(t *TorData) int {
 	intStr := ""
 	var b byte
 	for b= t.next(); b != 'e'; b = t.next() {
@@ -37,7 +37,7 @@ func intParse(t *Data) int {
 	return integ
 }
 
-func stringParse(t *Data) string {
+func stringParse(t *TorData) string {
 	t.prev()
 	
 	stringSize := ""
@@ -56,7 +56,7 @@ func stringParse(t *Data) string {
 	return string(bstring)
 }
 
-func listParse(t *Data) []interface{} {
+func listParse(t *TorData) []interface{} {
 	var itemSlice []interface{}
 
 	//We read until we reach the end 'e' of the list and make this
@@ -70,7 +70,7 @@ func listParse(t *Data) []interface{} {
 	return itemSlice
 }
 
-func dictParse(t *Data) map[string]interface{} {
+func dictParse(t *TorData) map[string]interface{} {
 	dictMap := make(map[string]interface{})
 	
 	//We read until we reach the end 'e' of the dictionary and make this
@@ -87,7 +87,7 @@ func dictParse(t *Data) map[string]interface{} {
 	return dictMap
 }
 
-func nextItem(t *Data) interface{} {
+func nextItem(t *TorData) interface{} {
 	switch t.next() {
 		case 'd':
 			return dictParse(t)
@@ -104,7 +104,7 @@ func nextItem(t *Data) interface{} {
 	return nil
 }
 
-func GetMainDict(t *Data) map[string]interface{} {
+func GetMainDict(t *TorData) map[string]interface{} {
 	
 	infoDict := nextItem(t)
 	if len(t.Data) > t.pos {
