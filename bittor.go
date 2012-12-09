@@ -5,6 +5,8 @@ import(
 	"strconv"
 )
 
+//TorData is the structure used to parse trough the torrentfile
+// Data[] is assumed to hold all torrentfile data. 
 type TorData struct {
 	Data []byte
 	pos int
@@ -104,6 +106,12 @@ func nextItem(t *TorData) interface{} {
 	return nil
 }
 
+//Gets the main dictionary that is assumed to be the first item in a torrent file
+//and only item (altough the main dict can contain arbitrary many items)
+//keys are assumed to be strings while values can be anything and is returned
+//as a interface{} so type assertion is needed. The TorData struct passed 
+//to the function needs to have Data to work on (normaly you just read in the whole
+//file as a []byte into data).  
 func GetMainDict(t *TorData) map[string]interface{} {
 	
 	infoDict := nextItem(t)
@@ -113,6 +121,7 @@ func GetMainDict(t *TorData) map[string]interface{} {
 	return infoDict.(map[string]interface{})
 }
 
+//Gets the info dict out of a main dict, returns nil if it doesn't exists
 func GetInfoDict(m map[string]interface{}) map[string]interface{}{
 	for k,v := range m {
 		if k == "info" {
