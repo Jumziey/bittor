@@ -1,32 +1,36 @@
 package bittor
 
 import(
-	"log"
 	"strconv"
+	"errors"
+	"fmt"
+	"io/ioutil"
 )
 
-//TorData is the structure used to parse trough the torrentfile
-// Data[] is assumed to hold all torrentfile data. 
-type TorData struct {
-	Data []byte
+
+type torData struct {
+	data []byte
 	pos int
+	
+	//Gives the name of the torrent thats parsed, used for error messages. 
+	tfile string
 }
 
-func (t *TorData)next() byte {
-	b := t.Data[t.pos]
+func (t *torData)next() byte {
+	b := t.data[t.pos]
 	t.pos = t.pos+1
 	return b
 }
 
-func (t *TorData)peek() byte {
-	return t.Data[t.pos]
+func (t *torData)peek() byte {
+	return t.data[t.pos]
 }
 
-func (t *TorData)prev() {
+func (t *torData)prev() {
 	t.pos = t.pos-1
 }
 
-func intParse(t *TorData) int {
+func intParse(t *torData) (int, error) {
 	intStr := ""
 	var b byte
 	for b= t.next(); b != 'e'; b = t.next() {
@@ -34,12 +38,12 @@ func intParse(t *TorData) int {
 	}
 	integ, err := strconv.Atoi(intStr)
 	if err != nil {
-		log.Fatalln("Error in intParse: ", err)
+		return 0, errors.New(fmt.Sprint("Error in intParse at ", t.pos, ", in: ",t.tfile))
 	}
-	return integ
+	return integ, nil
 }
 
-func stringParse(t *TorData) string {
+func stringParse(t *torData) (string, error) {
 	t.prev()
 	
 	stringSize := ""
@@ -48,31 +52,34 @@ func stringParse(t *TorData) string {
 	}
 	s_size, err := strconv.Atoi(stringSize)
 	if err != nil {
-		log.Fatalln("Error in stringParse: ", err)
+		return "", errors.New(fmt.Sprint("Error in stringParse at ", t.pos, ", in: ",t.tfile))
 	}
 	
 	bstring := make([]byte, s_size)
 	for i:=0; i<s_size; i++ {
 		bstring[i] = t.next()
 	}
-	return string(bstring)
+	return string(bstring), nil
 }
 
-func listParse(t *TorData) []interface{} {
+func listParse(t *torData) ([]interface{}, error) {
 	var itemSlice []interface{}
 
 	//We read until we reach the end 'e' of the list and make this
 	//a list item. we peek so we don't fuck it up for nextItem(*Data)
 	for t.peek() != 'e' {
-		s := nextItem(t)
+		s, err := nextItem(t)
+		if err != nil {
+			return nil, errors.New(fmt.Sprint("Error in listParse(): ", err))
+		}
 		itemSlice = append(itemSlice, s)
 	}
 	t.next() //Throw away the 'e'
 	
-	return itemSlice
+	return itemSlice, nil
 }
 
-func dictParse(t *TorData) map[string]interface{} {
+func dictParse(t *torData) (map[string]interface{}, error) {
 	dictMap := make(map[string]interface{})
 	
 	//We read until we reach the end 'e' of the dictionary and make this
@@ -80,16 +87,24 @@ func dictParse(t *TorData) map[string]interface{} {
 	//We must be able to read two items at a time, otherwise the torrent is faulty
 	//formatted
 	for t.peek() != 'e' {
-		key := nextItem(t)
-		value := nextItem(t)
+		key, err := nextItem(t)
+		if err != nil {
+			return nil, errors.New(fmt.Sprint("Error in dictParse(): ", err))
+		}
+		
+		value, err := nextItem(t)
+		if err != nil {
+			return nil, errors.New(fmt.Sprint("Error in dictParse(): ", err))
+		}
+		
 		dictMap[key.(string)] = value
 	}
 	t.next() //Throw away the 'e'
 	
-	return dictMap
+	return dictMap, nil
 }
 
-func nextItem(t *TorData) interface{} {
+func nextItem(t *torData) (interface{}, error) {
 	switch t.next() {
 		case 'd':
 			return dictParse(t)
@@ -100,25 +115,35 @@ func nextItem(t *TorData) interface{} {
 		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 			return stringParse(t)
 		default:
-			log.Fatalln("Out of bonds in nextItem")
+			return nil, errors.New(fmt.Sprint("Out of bounds in nextItem() at ", t.pos," in: ", t.tfile, " (Probably badly encoded torrent)"))
 	}
 	//Unreachable, but needed due to weird controls in go-compiler
-	return nil
+	return nil, nil
 }
 
-//Gets the main dictionary that is assumed to be the first item in a torrent file
-//and only item (altough the main dict can contain arbitrary many items)
-//keys are assumed to be strings while values can be anything and is returned
-//as a interface{} so type assertion is needed. The TorData struct passed 
-//to the function needs to have Data to work on (normaly you just read in the whole
-//file as a []byte into data).  
-func GetMainDict(t *TorData) map[string]interface{} {
+//Reads in the torrentfile f_name and assumes that the torrent just have one
+//main dict item (altough the main dict can contain arbitrary many items). 
+//The dict itself is assumed to only have strings or ints as keys (Altough both are
+//represented as strings) the value can be anything and is returned as an
+//interface{}, type is assertion needed to properly access the value. 
+func GetMainDict(f_name string) (map[string]interface{}, error) {
+	var t torData
+	var err error
 	
-	infoDict := nextItem(t)
-	if len(t.Data) > t.pos {
-		log.Fatalln("Torrent isn't bencoded correctly(Has more then an info dict")
+	t.data, err = ioutil.ReadFile(f_name)
+	t.tfile = f_name
+	if err != nil {
+		return nil, err
 	}
-	return infoDict.(map[string]interface{})
+	
+	mainDict, err:= nextItem(&t)
+	if err != nil {
+		return nil, err
+	}
+	if len(t.data) > t.pos {
+		return nil, errors.New(fmt.Sprint("Torrent isn't bencoded correctly(Has more then an one Main dict item"))
+	}
+	return mainDict.(map[string]interface{}), nil
 }
 
 //Gets the info dict out of a main dict, returns nil if it doesn't exists
