@@ -11,13 +11,13 @@ type TorData struct {
 }
 
 func (t *Data)next() byte {
-	b := t.data[t.pos]
+	b := t.Data[t.pos]
 	t.pos = t.pos+1
 	return b
 }
 
 func (t *Data)peek() byte {
-	return t.data[t.pos]
+	return t.Data[t.pos]
 }
 
 func (t *Data)prev() {
@@ -107,7 +107,7 @@ func nextItem(t *Data) interface{} {
 func GetMainDict(t *Data) map[string]interface{} {
 	
 	infoDict := nextItem(t)
-	if len(t.data) > t.pos {
+	if len(t.Data) > t.pos {
 		log.Fatalln("Torrent isn't bencoded correctly(Has more then an info dict")
 	}
 	return infoDict.(map[string]interface{})
