@@ -2,8 +2,6 @@ package bittor
 
 import(
 	"log"
-	"fmt"
-	"io/ioutil"
 	"strconv"
 )
 
