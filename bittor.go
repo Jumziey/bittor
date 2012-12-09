@@ -7,8 +7,8 @@ import(
 	"strconv"
 )
 
-type Data struct {
-	data []byte
+type TorData struct {
+	Data []byte
 	pos int
 }
 
