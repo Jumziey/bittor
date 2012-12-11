@@ -5,6 +5,7 @@ import(
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"reflect"
 )
 
 
@@ -154,4 +155,43 @@ func GetInfoDict(m map[string]interface{}) map[string]interface{}{
 		}
 	}
 	return nil
+}
+
+//Gets a string list value from a dictionary (or map[string]Interface{}) that
+//has the key value "key". These reflection things are subtle and recommended
+//reading is 
+//
+//http://blog.golang.org/2011/09/laws-of-reflection.html, 
+//http://research.swtch.com/interfaces and the
+//The "fmt" source code. 
+//
+//If there is diffrent list-values in a list you'll have to implement your own 
+//corresponding function. The string list value is so common that this function is
+//included ;)
+func GetStringListFromDict(key string, dict map[string]interface{}) ([]string, error) {
+
+	iVal, ok := dict[key]
+	
+	
+	iList, ok := iVal.([]interface{})
+	if !ok {
+		return nil, errors.New(fmt.Sprint("Not a list value corresponding to the key \"", key,"\" in the dict"))
+	}
+	
+	list := make([]string, len(iList))
+	for i,it := range iList{
+		v := reflect.ValueOf(it)
+		
+		//There's some special conditions for these types of lists and they have
+		//to be tested in the correct order so the program don't panic if a faulty
+		// list-value is corresponding to a key.
+		if v.Kind() == reflect.Slice && v.Index(0).IsValid() && v.Len() == 1 &&
+		 v.Index(0).Elem().Kind() == reflect.String {
+			list[i] = v.Index(0).Elem().Interface().(string) //Love reflection! xD
+		} else {
+			return nil, errors.New(fmt.Sprint("An incorrect list value corresponding to the key \"", key,"\" in the dict"))
+		}
+	}
+	return list, nil
+		
 }
