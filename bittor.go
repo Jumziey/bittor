@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"crypto/sha1"
+	"hash"
 )
 
 type torData struct {
 	data []byte
 	pos  int
-
-	//Gives the name of the torrent thats parsed, used for error messages.
-	name string
 }
 
 func (t *torData) next() byte {
@@ -37,7 +36,7 @@ func intParse(t *torData) (int, error) {
 	}
 	integ, err := strconv.Atoi(intStr)
 	if err != nil {
-		return 0, errors.New(fmt.Sprint("Error in intParse at ", t.pos, ", in: ", t.name))
+		return 0, errors.New(fmt.Sprint("Error in intParse at ", t.pos))
 	}
 	return integ, nil
 }
@@ -49,13 +48,13 @@ func stringParse(t *torData) (string, error) {
 	for s := t.next(); s != ':'; s = t.next() {
 		stringSize = stringSize + string(s)
 	}
-	s_size, err := strconv.Atoi(stringSize)
+	sSize, err := strconv.Atoi(stringSize)
 	if err != nil {
-		return "", errors.New(fmt.Sprint("Error in stringParse at ", t.pos, ", in: ", t.name))
+		return "", errors.New(fmt.Sprint("Error in stringParse at ", t.pos))
 	}
 
-	bstring := make([]byte, s_size)
-	for i := 0; i < s_size; i++ {
+	bstring := make([]byte, sSize)
+	for i := 0; i < sSize; i++ {
 		bstring[i] = t.next()
 	}
 	return string(bstring), nil
@@ -114,7 +113,7 @@ func nextItem(t *torData) (interface{}, error) {
 	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 		return stringParse(t)
 	default:
-		return nil, errors.New(fmt.Sprint("Out of bounds in nextItem() at ", t.pos, " in: ", t.name, " (Probably badly encoded torrent)"))
+		return nil, errors.New(fmt.Sprint("Out of bounds in nextItem() at ", t.pos, " (Probably badly encoded torrent)"))
 	}
 	//Unreachable, but needed due to weird controls in go-compiler
 	return nil, nil
@@ -125,12 +124,11 @@ func nextItem(t *torData) (interface{}, error) {
 //The dict itself is assumed to only have strings or ints as keys (Altough both are
 //represented as strings) the value can be anything and is returned as an
 //interface{}, type assertion is needed to properly access the value.
-func GetMainDict(tData []byte, tName string) (map[string]interface{}, error) {
+func GetMainDict(tData []byte) (map[string]interface{}, error) {
 	var t torData
 	var err error
 
 	t.data = tData
-	t.name = tName
 
 	mainDict, err := nextItem(&t)
 	if err != nil {
@@ -141,6 +139,9 @@ func GetMainDict(tData []byte, tName string) (map[string]interface{}, error) {
 	}
 	return mainDict.(map[string]interface{}), nil
 }
+
+
+
 
 //Gets the info dict out of a main dict, returns nil if it doesn't exists
 func GetInfoDict(m map[string]interface{}) (map[string]interface{}, error) {
@@ -188,4 +189,57 @@ func GetStringListFromDict(key string, dict map[string]interface{}) ([]string, e
 	}
 	return list, nil
 
+}
+
+func GetInfoHash(tData []byte) (hash.Hash, error) {
+	t := new(torData)
+	
+	t.data = tData
+	if t.next() != 'd' {
+		return nil, errors.New("Not a torrent file! Atleast not correctly bencoded file")
+	}
+	
+	info, err := infoByteValue(t)
+	if err != nil {
+		return nil, errors.New(fmt.Sprint("Error GetInfoHash: ", err))
+	}
+	
+	th := sha1.New()
+	_,err = th.Write(info)
+	if err != nil {
+		return nil, errors.New(fmt.Sprint("Error GetInfoHash: ", err))
+	}
+	
+	return th, nil
+}
+
+func infoByteValue(t *torData) ([]byte, error) {
+
+	//We read until we reach the end 'e' of the dictionary and make this
+	//a dictionary item. We peek so we don't fuck it up for nextItem().
+	//We must be able to read two items at a time, otherwise the torrent is faulty
+	//formatted
+	for t.peek() != 'e' {
+		key, err := nextItem(t)
+		if err != nil {
+			return nil, errors.New(fmt.Sprint("Error in dictParse(): ", err))
+		}
+		
+		if key.(string) != "info" {
+			_, err = nextItem(t)
+		if err != nil {
+			return nil,errors.New(fmt.Sprint("Error in dictParse(): ", err))
+		}
+			continue
+		}
+		
+		s := t.pos
+		_, err = nextItem(t)
+		if err != nil {
+			return nil,errors.New(fmt.Sprint("Error in dictParse(): ", err))
+		}
+		return t.data[s:t.pos-1], nil
+		
+	}
+	return nil, errors.New("SHOULD NOT REACH THIS IN INFOBYTEVALUE!")
 }
