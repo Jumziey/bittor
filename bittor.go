@@ -238,7 +238,7 @@ func infoByteValue(t *torData) ([]byte, error) {
 		if err != nil {
 			return nil,errors.New(fmt.Sprint("Error in dictParse(): ", err))
 		}
-		return t.data[s:t.pos-1], nil
+		return t.data[s:t.pos], nil
 		
 	}
 	return nil, errors.New("SHOULD NOT REACH THIS IN INFOBYTEVALUE!")
